@@ -1,0 +1,25 @@
+server:
+  port: 8080
+
+spring:
+  ai:
+    mcp:
+      server:
+        enabled: true
+        protocol: SSE
+        sse-endpoint: /mcp/sse
+        sse-message-endpoint: /mcp/message
+        name: Travel-Budget-Optimizer-Server
+        version: 1.0.0
+
+cloud-tools:
+  brave-search:
+    api-key: ${BRAVE_API_KEY:fake-key}
+  google-maps:
+    api-key: ${GOOGLE_MAPS_API_KEY:fake-key}
+  browserless:
+    token: ${BROWSERLESS_API_KEY:fake-key}
+  neon-postgres:
+    url: ${NEON_POSTGRES_URL:jdbc:postgresql://localhost:5432/fake-db}
+    username: ${NEON_POSTGRES_USERNAME:fake-user}
+    password: ${NEON_POSTGRES_PASSWORD:fake-password}
