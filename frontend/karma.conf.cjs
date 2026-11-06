@@ -5,7 +5,6 @@ module.exports = function (config) {
             require('karma-jasmine'),
             require('karma-chrome-launcher'),
             require('karma-jasmine-html-reporter'),
-            require('@angular/build/plugins/karma'),
         ],
         client: { clearContext: false },
         reporters: ['progress', 'kjhtml'],
