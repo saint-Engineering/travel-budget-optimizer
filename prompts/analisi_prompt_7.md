@@ -11,13 +11,15 @@ Prompt esaminato: `prompt_github_copilot.md`, sezione “Prompt 7: Implementazio
 
 Non occorre suddividere il prompt: descrive un'attività unica e circoscritta.
 
-## Aspetti da specificare meglio
+## Domande per chiarire il prompt
 
-1. **Registrazione del tool:** scegliere tra l'annotazione Spring AI e `ToolCallback`, indicando quale API è compatibile con le dipendenze del progetto e come il tool deve essere reso disponibile al server MCP.
-2. **Uso dell'engine:** indicare di riutilizzare `TravelOptimizationEngine`, avviare un job con un ID univoco e consultare le API esistenti per stato e risultato. Chiarire che il risultato attualmente viene conservato nella mappa in memoria, non in un database.
-3. **Attesa sincrona:** definire modalità di attesa, frequenza di polling ed eventuale limite massimo. “Bloccare il thread corrente in modo non allocativo” è ambiguo: attendere sincronicamente comporta comunque che l'invocazione resti in attesa. Specificare inoltre come gestire interruzioni e timeout.
-4. **Completamento ed errori:** definire come riconoscere il completamento, cosa restituire se il job non produce un payload e come segnalare errori o input non validi al client MCP.
-5. **Formato della risposta:** scegliere tra testo JSON e contenuto strutturato MCP e indicare come serializzare `TravelOptionsResponse`.
+1. **File modificabili:** confermi che l'implementazione deve limitare le modifiche a `TravelMcpServerTools` e ai relativi test, riutilizzando `TravelOptimizationEngine` e i DTO già presenti senza modificare il trasporto MCP o la persistenza?
+2. **Registrazione del tool:** quale meccanismo va usato per registrare il tool MCP con le dipendenze del progetto: annotazione Spring AI o `ToolCallback`? Come deve essere esposto dal server MCP?
+3. **Avvio e attesa del job:** il bridge deve invocare `TravelOptimizationEngine` con un ID univoco e attendere il completamento interrogando le API di stato e risultato già disponibili? Quale intervallo di polling e quale timeout massimo si devono applicare?
+4. **Completamento e anomalie:** quale stato identifica il completamento? Se il job scade, viene interrotto o termina senza payload, il tool deve restituire un errore MCP o un risultato specifico? Come vanno propagati gli input non validi e gli errori dell'engine?
+5. **Formato della risposta:** il client MCP deve ricevere `TravelOptionsResponse` come testo JSON oppure come contenuto strutturato? In entrambi i casi, è richiesto un particolare schema o nome dei campi?
+
+La formulazione “bloccare il thread corrente in modo non allocativo” andrebbe inoltre chiarita: l'attesa sincrona mantiene l'invocazione in attesa, mentre l'eventuale strategia per contenere il consumo di risorse va specificata separatamente.
 
 ## Indicazione per la revisione del prompt
 
