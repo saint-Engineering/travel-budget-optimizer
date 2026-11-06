@@ -1,0 +1,116 @@
+<main class="page-shell">
+    <header class="topbar">
+        <a class="brand" href="/" aria-label="Travelwise home">
+            <span class="brand-mark" aria-hidden="true">↗</span>
+            <span>travelwise</span>
+        </a>
+        <span class="topbar-note"><span class="live-dot"></span> Pianifica meglio, spendi meno</span>
+    </header>
+
+    <section class="hero">
+        <div class="hero-copy">
+            <div class="eyebrow"><span class="eyebrow-line"></span> IL TUO PROSSIMO VIAGGIO, PIÙ SMART</div>
+            <h1>Grandi viaggi.<br><span>Piccolo budget.</span></h1>
+            <p>Confrontiamo le opzioni per te, così trovi il modo migliore per arrivare a destinazione senza sforare il
+                budget.</p>
+            <div class="trust-row">
+                <span class="trust-icon">✦</span>
+                <span>Tre alternative, un viaggio perfetto.</span>
+            </div>
+        </div>
+
+        <section class="search-card" aria-labelledby="form-title">
+            <div class="card-heading">
+                <div>
+                    <span class="section-kicker">INIZIA DA QUI</span>
+                    <h2 id="form-title">Dove ti portiamo?</h2>
+                </div>
+                <span class="plane-icon" aria-hidden="true">✈</span>
+            </div>
+
+            <form [formGroup]="form" (ngSubmit)="inviaRichiesta()" novalidate>
+                <div class="route-fields">
+                    <label class="field">
+                        <span class="field-label">PARTENZA</span>
+                        <span class="input-wrap"><span class="field-icon">⌖</span><input formControlName="partenza"
+                                placeholder="es. Milano" autocomplete="address-level2"></span>
+                        <span class="field-error" *ngIf="partenza.touched && partenza.invalid">Inserisci una località
+                            valida.</span>
+                    </label>
+                    <span class="route-connector" aria-hidden="true">→</span>
+                    <label class="field">
+                        <span class="field-label">DESTINAZIONE</span>
+                        <span class="input-wrap"><span class="field-icon">⌖</span><input formControlName="destinazione"
+                                placeholder="es. Roma" autocomplete="address-level2"></span>
+                        <span class="field-error" *ngIf="destinazione.touched && destinazione.invalid">Inserisci una
+                            località valida.</span>
+                    </label>
+                </div>
+
+                <label class="field budget-field">
+                    <span class="field-label">BUDGET MASSIMO</span>
+                    <span class="input-wrap budget-wrap"><span class="currency-symbol">€</span><input type="number"
+                            formControlName="budgetMassimo" min="0.01" step="0.01" inputmode="decimal"
+                            placeholder="300"></span>
+                    <span class="field-error" *ngIf="budgetMassimo.touched && budgetMassimo.invalid">Il budget deve
+                        essere maggiore di zero.</span>
+                </label>
+
+                <button class="submit-button" type="submit" [disabled]="form.invalid || isLoading">
+                    <span>{{ isLoading ? 'Sto cercando le opzioni' : 'Trova il mio viaggio' }}</span>
+                    <span class="button-arrow" aria-hidden="true">{{ isLoading ? '…' : '↗' }}</span>
+                </button>
+                <p class="form-footnote"><span aria-hidden="true">♧</span> Nessuna prenotazione, solo le opzioni
+                    migliori.</p>
+            </form>
+        </section>
+    </section>
+
+    <section class="progress-panel" *ngIf="isLoading || logs.length" aria-live="polite">
+        <div class="progress-heading">
+            <div>
+                <span class="section-kicker">{{ isLoading ? 'AL LAVORO PER TE' : 'AGGIORNAMENTI' }}</span>
+                <h2>{{ isLoading ? 'Stiamo preparando il tuo viaggio' : 'La tua ricerca' }}</h2>
+            </div>
+            <span class="progress-value">{{ progress }}%</span>
+        </div>
+        <div class="progress-track"><span [style.width.%]="progress"></span></div>
+        <ol class="log-list">
+            <li *ngFor="let log of logs; let last = last" [class.current-log]="last && isLoading">
+                <span class="log-marker" aria-hidden="true"></span>{{ log }}
+            </li>
+        </ol>
+        <p class="job-reference" *ngIf="jobId">Codice richiesta <span>{{ jobId }}</span></p>
+    </section>
+
+    <section class="error-banner" *ngIf="errorMessage" role="alert">
+        <span aria-hidden="true">!</span>
+        <p>{{ errorMessage }}</p>
+    </section>
+
+    <section class="results-section" *ngIf="alternatives.length" aria-live="polite">
+        <div class="results-heading">
+            <div><span class="section-kicker">SELEZIONATE PER TE</span>
+                <h2>Tre modi per arrivarci.</h2>
+            </div>
+            <span class="result-count">{{ alternatives.length }} opzioni</span>
+        </div>
+        <div class="results-grid">
+            <article class="option-card" *ngFor="let option of alternatives; let index = index"
+                [class.featured-option]="index === 0">
+                <div class="option-topline">
+                    <span class="option-number">0{{ index + 1 }}</span>
+                    <span class="option-tag" *ngIf="index === 0">CONSIGLIATA</span>
+                </div>
+                <div class="option-icon" aria-hidden="true">{{ index === 0 ? '✈' : index === 1 ? '↗' : '⇄' }}</div>
+                <h3>{{ option.mezzo }}</h3>
+                <p class="option-description">{{ option.descrizioneDettagliata }}</p>
+                <div class="option-meta"><span>◷ &nbsp;{{ option.tempoPercorrenza }}</span></div>
+                <div class="option-price"><span>da</span><strong>{{ option.costoTotalizzato |
+                        currency:'EUR':'symbol':'1.0-2':'it-IT' }}</strong></div>
+            </article>
+        </div>
+    </section>
+
+    <footer class="footer"><span>travelwise</span><span>Viaggia lontano. Spendi con intelligenza.</span></footer>
+</main>
