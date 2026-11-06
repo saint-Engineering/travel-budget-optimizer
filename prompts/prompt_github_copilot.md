@@ -72,14 +72,29 @@ Gestisci correttamente i potenziali errori e i timeout dell'SseEmitter.
 
 ---
 
-## 🔌 FASE 4: Esposizione del Server MCP (Bridge Sincrono/Asincrono)
+## 🔌 FASE 4: Esposizione del Server MCP (Bridge Asincrono)
 
 ### Prompt 7: Implementazione del Bridge MCP su Spring AI
 ```text
-Crea una classe denominata `TravelMcpServerTools` per esporre le funzionalità del nostro POC come Tool all'interno dell'infrastruttura del Server MCP di Spring AI (HTTP/SSE).
-1. Il metodo deve essere registrato come Tool MCP (usando l'annotazione apposita di Spring AI o implementando ToolCallback). Il tool si deve chiamare 'ottimizzaBudgetViaggio' e accettare tre argomenti: partenza, destinazione, budgetMassimo.
-2. Poiché i client MCP esterni (come Claude Desktop o Cursor) richiedono una risposta atomica e sincrona, il metodo non può restituire subito un Job ID. Deve invece invocare internamente la logica del sistema, generare una sessione virtuale, e bloccare il thread corrente in modo non allocativo (es. usando un CompletableFuture.get() o un ciclo di polling controllato sullo stato del Job) finché l'Engine non ha completato tutte e tre le fasi di ottimizzazione.
-3. Una volta recuperato il payload finale con le 3 alternative dal DB/mappa di stato, restituisci l'oggetto TravelOptionsResponse convertito in stringa o formato strutturato per il protocollo MCP.
+Crea la classe Spring `TravelMcpServerTools` per esporre le funzionalità del POC come tool del server MCP fornito da Spring AI.
+
+Vincoli di ambito e architettura:
+- Limita le modifiche a `TravelMcpServerTools` e ai relativi test.
+- Riutilizza `TravelOptimizationEngine`, `TravelOptionsResponse`, gli altri DTO e le API esistenti per stato e risultato. Non modificare l'engine, i DTO, il trasporto MCP, la configurazione del server o la persistenza; non aggiungere dipendenze.
+- L'applicazione può usare LangChain4j per invocare server MCP di terze parti, ma questa classe implementa esclusivamente il ruolo di fornitore MCP del POC con Spring AI. Non implementare qui un client MCP LangChain4j.
+- Registra i tool usando l'annotazione Spring AI `@McpTool` e gli schemi/annotazioni di parametro previsti dalla versione Spring AI già presente nel progetto. I tool devono essere esposti dal server MCP già configurato.
+
+Implementa due tool MCP:
+1. `ottimizzaBudgetViaggio(partenza, destinazione, budgetMassimo)`: valida gli input, genera un UUID univoco e avvia l'ottimizzazione tramite `TravelOptimizationEngine`. Restituisce subito un contenuto strutturato con il job ID e lo stato iniziale; non attendere il completamento e non usare polling, cicli di attesa o blocchi del thread.
+2. `recuperaRisultatoOttimizzazione(jobId)`: usa le API di stato e risultato già disponibili, senza polling. Se il job è ancora in corso, restituisce un contenuto strutturato con job ID e stato; se lo stato è `COMPLETED`, restituisce le tre alternative come contenuto strutturato conforme ai campi di `TravelOptionsResponse`. Non serializzare il DTO come testo JSON.
+
+Gestione degli errori:
+- Un input non valido deve produrre un errore MCP riconoscibile come input non valido.
+- Gli errori dell'engine devono produrre un errore MCP interno; registra nel log i dettagli diagnostici accurati senza esporre dettagli interni non necessari al client.
+- Gestisci timeout massimo di 120 secondi, interruzione e completamento senza payload con errori MCP specifici. I timeout devono essere ripetibili su richiesta del client/utente, senza avviare automaticamente un nuovo job.
+- Gestisci in modo esplicito job ID sconosciuti e gli stati restituiti dalle API esistenti; non inventare stati o convertire errori in risposte di successo.
+
+Aggiungi test mirati per registrazione e schema dei tool, validazione degli input, avvio con restituzione immediata del job ID, recupero degli stati non terminali e del risultato `COMPLETED`, nonché per job sconosciuti, timeout, interruzione, payload assente ed errori dell'engine. Segui le convenzioni di test e i pattern già presenti nel progetto.
 ```
 
 ---
