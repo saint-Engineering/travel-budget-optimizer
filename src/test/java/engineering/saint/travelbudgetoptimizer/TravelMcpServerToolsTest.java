@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -123,6 +124,29 @@ class TravelMcpServerToolsTest {
         assertEquals(jobId, result.jobId());
         assertEquals(response.opzioniViaggio(), result.opzioniViaggio());
         assertFalse(hasTrackedJob(jobId));
+
+        TravelMcpServerTools.OptimizationResult retry = tools.recuperaRisultatoOttimizzazione(jobId);
+
+        assertEquals(result, retry);
+    }
+
+    @Test
+    void recognizesCompletionBetweenStatusAndPayloadReads() throws Exception {
+        String jobId = startJob();
+        TravelOptionsResponse response = new TravelOptionsResponse(List.of(
+                new TravelOption("Treno", 100, "3h", "Roma-Milano"),
+                new TravelOption("Bus", 40, "5h", "Roma-Milano"),
+                new TravelOption("Aereo", 150, "1h", "Roma-Milano")));
+        when(engine.getStatoAvanzamento(jobId)).thenReturn(
+                Optional.of("Fase 3: Filtraggio e salvataggio sul DB Cloud Neon Postgres in corso"),
+                Optional.of("Fase 3: Filtraggio e salvataggio sul DB Cloud Neon Postgres completati"));
+        when(engine.getPayloadFinale(jobId)).thenReturn(Optional.of(objectMapper.writeValueAsString(response)));
+
+        TravelMcpServerTools.OptimizationResult result = tools.recuperaRisultatoOttimizzazione(jobId);
+
+        assertEquals("COMPLETED", result.stato());
+        assertEquals(response.opzioniViaggio(), result.opzioniViaggio());
+        verify(engine, times(2)).getStatoAvanzamento(jobId);
     }
 
     @Test

@@ -73,7 +73,7 @@ public class TravelMcpServerTools {
         }
 
         Long startedAt = jobStartTimes.get(jobId);
-        if (startedAt == null) {
+        if (startedAt == null && Thread.currentThread().isInterrupted()) {
             throw new IllegalArgumentException("UNKNOWN_JOB: nessun job trovato per il job ID indicato.");
         }
         if (Thread.currentThread().isInterrupted()) {
@@ -85,11 +85,18 @@ public class TravelMcpServerTools {
         try {
             status = travelOptimizationEngine.getStatoAvanzamento(jobId);
             payload = travelOptimizationEngine.getPayloadFinale(jobId);
+            if (payload.isPresent() && !COMPLETED_ENGINE_STATUS.equals(status.orElse(null))) {
+                status = travelOptimizationEngine.getStatoAvanzamento(jobId);
+            }
         } catch (RuntimeException exception) {
             throw erroreInterno(jobId, "lettura dello stato o del risultato", exception);
         }
 
         String engineStatus = status.orElse(null);
+        if (startedAt == null
+                && (!COMPLETED_ENGINE_STATUS.equals(engineStatus) || payload.isEmpty())) {
+            throw new IllegalArgumentException("UNKNOWN_JOB: nessun job trovato per il job ID indicato.");
+        }
         if (FAILED_ENGINE_STATUS.equals(engineStatus)) {
             jobStartTimes.remove(jobId);
             logger.error("Il motore ha segnalato un errore per il job MCP {}: stato={}", jobId, engineStatus);
