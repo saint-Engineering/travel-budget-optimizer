@@ -34,7 +34,7 @@ jobs:
           java-version: '25'
           cache: maven       # salva e ripristina ~/.m2/repository tra un run e l'altro
       - name: Build e test
-        run: ./mvnw -B verify
+        run: mvn -B verify
       - name: Jar come artifact
         uses: actions/upload-artifact@v7
         with:
