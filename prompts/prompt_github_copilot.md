@@ -103,9 +103,30 @@ Aggiungi test mirati per registrazione e schema dei tool, validazione degli inpu
 
 ### Prompt 8: Servizio Angular per la comunicazione REST e lo Stream SSE
 ```text
-Genera un servizio Angular (versione recente, usando l'HttpClient moderno fornito tramite provideHttpClient()) denominato `TravelService`. Il servizio deve includere due metodi principali per interagire con il nostro backend Spring Boot:
-1. avviaRichiestaOttimizzazione(partenza: string, destinazione: string, budgetMassimo: number): Observable<any> - Effettua una richiesta HTTP POST all'endpoint '/api/viaggi/ottimizza' inviando i dati del form e restituendo l'Observable contenente il Job ID.
-2. ascoltaAggiornamentiStatus(jobId: string): Observable<string> - Utilizza la classe nativa del browser 'EventSource' per aprire un canale SSE verso '/api/viaggi/status/' + jobId. Incanala i messaggi di testo ricevuti dal server (Fase 1, Fase 2, Fase 3) all'interno di uno Subject/Observable di Angular per permettere al componente di consumarli in tempo reale. Gestisci gli eventi di chiusura dello stream inviati dal server completando l'Observable e gestisci la disconnessione (eventSource.close()).
+Genera, un applicazione Angular e in questa un servizio `TravelService` per comunicare con il backend Spring Boot e la relativa interfaccia utente.
+ 
+Non creare o modificare la configurazione di bootstrap: considera `provideHttpClient()` gi  configurato nell applicazione.
+ 
+Se il servizio del backend nel backend non è disponibile fermati.
+ 
+Il servizio TravelService deve esporre:
+1. `avviaRichiestaOttimizzazione(partenza: string, destinazione: string, budgetMassimo: number): Observable<{ jobId: string }>`
+  - Esegue una POST a `/api/viaggi/ottimizza`.
+  - Invia un corpo JSON con le propriet  `partenza`, `destinazione` e `budgetMassimo`.
+  - Tipizza la risposta in base al contratto `{ jobId: string }`.
+2. `ascoltaAggiornamentiStatus(jobId: string): Observable<TravelSseEvent>`
+  - Apre un `EventSource` verso `/api/viaggi/status/{jobId}`.
+  - Gestisce gli eventi SSE nominati dal backend:
+    - `status`: emette l aggiornamento testuale;
+    - `result`: emette il risultato JSON;
+    - `timeout`: emette il messaggio di timeout.
+  - Definisce un tipo discriminato `TravelSseEvent` per distinguere chiaramente questi tre eventi e i rispettivi payload.
+  - Al ricevimento di `result` o `timeout`, chiude l `EventSource` e completa l Observable.
+  - Chiude l `EventSource` anche quando il consumatore si disiscrive, evitando connessioni pendenti.
+  - Gestisce gli errori di connessione senza lasciare risorse aperte; chiarisce nel codice se lasciare a `EventSource` il tentativo automatico di riconnessione per errori transitori.
+Usa `HttpClient` per la POST e l API nativa `EventSource` per SSE. Non aggiungere componenti UI n  modificare il backend.
+ha il menu contestuale
+
 ```
 
 ### Prompt 9: Componente Angular Form e Visualizzazione Card Risultati
