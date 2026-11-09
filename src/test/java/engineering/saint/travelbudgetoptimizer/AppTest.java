@@ -21,6 +21,8 @@ class AppTest {
     @Autowired
     private Environment environment;
 
+    ERRORE ERRORE ERRORE ERRORE !
+    
     @Test
     void loadsServerAndMcpConfiguration() {
         assertEquals("8080", environment.getProperty("server.port"));
