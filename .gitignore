@@ -8,3 +8,5 @@
 .vscode/
 
 .fake
+
+/frontend/node_modules/
