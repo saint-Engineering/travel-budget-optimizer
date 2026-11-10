@@ -1,5 +1,4 @@
-
-# travel-budget-optimizer
+# travel-budget-optimizer (One Jar Deliverable)
 
 che, date due località (partenza e destinazione) e un budget di spesa massimo stabilito dall'utente, sia in grado di generare e confrontare dinamicamente alternative di viaggio ottimizzate
 
