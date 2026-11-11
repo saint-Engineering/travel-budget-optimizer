@@ -252,6 +252,27 @@ h1 span {
     margin-top: 23px;
 }
 
+.date-field {
+    margin-top: 18px;
+}
+
+.optional-label {
+    color: #aeb8c6;
+    font-size: 8px;
+    letter-spacing: .7px;
+}
+
+.input-wrap input[type="date"] {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    color: #e3e8ef;
+    color-scheme: dark;
+    background: transparent;
+    font-size: 13px;
+}
+
 .currency-symbol {
     margin-right: 10px;
     color: #b9c7d7;
@@ -495,6 +516,49 @@ h1 span {
     margin-top: auto;
     color: #c1cbd7;
     font-size: 11px;
+}
+
+.itinerary-details {
+    width: 100%;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid #48566a;
+    color: #c1cbd7;
+    font-size: 10px;
+    line-height: 1.5;
+}
+
+.indicative-label {
+    color: #d3deeb;
+    font-size: 8px;
+    font-weight: 800;
+}
+
+.itinerary-leg {
+    margin-top: 10px;
+    padding: 9px;
+    border-radius: 8px;
+    background: #101721;
+}
+
+.itinerary-leg p,
+.details-unavailable,
+.itinerary-source {
+    margin: 0 0 5px;
+}
+
+.itinerary-leg p:last-child {
+    margin-bottom: 0;
+}
+
+.leg-route {
+    color: #e0e7f0;
+    font-weight: 700;
+}
+
+.itinerary-source a {
+    margin-left: 5px;
+    color: #d5e0ed;
 }
 
 .option-price {

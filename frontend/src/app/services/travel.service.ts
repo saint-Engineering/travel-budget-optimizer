@@ -7,6 +7,22 @@ export interface TravelOption {
     costoTotalizzato: number;
     tempoPercorrenza: string;
     descrizioneDettagliata: string;
+    dettaglioViaggio?: TravelItineraryDetails;
+}
+
+export interface TravelItineraryDetails {
+    tratte: TravelLeg[];
+    fonti: string[];
+    indicativo: boolean;
+}
+
+export interface TravelLeg {
+    partenza: string | null;
+    destinazione: string | null;
+    orarioPartenza: string | null;
+    orarioArrivo: string | null;
+    vettore: string | null;
+    fermate: string[];
 }
 
 export interface TravelOptionsResponse {
@@ -22,6 +38,7 @@ export interface TravelOptimizationRequest {
     partenza: string;
     destinazione: string;
     budgetMassimo: number;
+    dataPartenza?: string;
 }
 
 export interface TravelOptimizationAccepted {
@@ -37,11 +54,13 @@ export class TravelService {
         partenza: string,
         destinazione: string,
         budgetMassimo: number,
+        dataPartenza?: string,
     ): Observable<TravelOptimizationAccepted> {
         const request: TravelOptimizationRequest = {
             partenza,
             destinazione,
             budgetMassimo,
+            ...(dataPartenza ? { dataPartenza } : {}),
         };
 
         return this.http.post<TravelOptimizationAccepted>(
@@ -110,7 +129,7 @@ export class TravelService {
     }
 }
 
-function parseTravelOptionsResponse(payload: string): TravelOptionsResponse {
+export function parseTravelOptionsResponse(payload: string): TravelOptionsResponse {
     const parsed: unknown = JSON.parse(payload);
     if (
         typeof parsed !== 'object' ||
@@ -121,5 +140,101 @@ function parseTravelOptionsResponse(payload: string): TravelOptionsResponse {
         throw new Error('Il risultato SSE non rispetta il formato atteso.');
     }
 
-    return parsed as TravelOptionsResponse;
+    const opzioniViaggio = parsed.opzioniViaggio.map((option): TravelOption => {
+        if (
+            typeof option !== 'object' ||
+            option === null ||
+            !('mezzo' in option) ||
+            typeof option.mezzo !== 'string' ||
+            !('costoTotalizzato' in option) ||
+            typeof option.costoTotalizzato !== 'number' ||
+            !('tempoPercorrenza' in option) ||
+            typeof option.tempoPercorrenza !== 'string' ||
+            !('descrizioneDettagliata' in option) ||
+            typeof option.descrizioneDettagliata !== 'string'
+        ) {
+            throw new Error('Un’opzione di viaggio non rispetta il formato atteso.');
+        }
+
+        const detail = 'dettaglioViaggio' in option ? option.dettaglioViaggio : undefined;
+        if (detail === undefined || detail === null) {
+            return {
+                mezzo: option.mezzo,
+                costoTotalizzato: option.costoTotalizzato,
+                tempoPercorrenza: option.tempoPercorrenza,
+                descrizioneDettagliata: option.descrizioneDettagliata,
+            };
+        }
+        if (
+            typeof detail !== 'object' ||
+            detail === null ||
+            !('tratte' in detail) ||
+            !Array.isArray(detail.tratte) ||
+            !('fonti' in detail) ||
+            !isStringArray(detail.fonti) ||
+            !('indicativo' in detail) ||
+            typeof detail.indicativo !== 'boolean'
+        ) {
+            throw new Error('I dettagli dell’itinerario non rispettano il formato atteso.');
+        }
+
+        const tratte = detail.tratte.map(parseTravelLeg);
+        return {
+            mezzo: option.mezzo,
+            costoTotalizzato: option.costoTotalizzato,
+            tempoPercorrenza: option.tempoPercorrenza,
+            descrizioneDettagliata: option.descrizioneDettagliata,
+            dettaglioViaggio: {
+                tratte,
+                fonti: detail.fonti,
+                indicativo: detail.indicativo,
+            },
+        };
+    });
+
+    return { opzioniViaggio };
+}
+
+function parseTravelLeg(value: unknown): TravelLeg {
+    if (!isRecord(value) || !isStringArray(value['fermate'])) {
+        throw new Error('Una tratta non rispetta il formato atteso.');
+    }
+    const fermate = value['fermate'];
+
+    const partenza = optionalNullableString(value, 'partenza');
+    const destinazione = optionalNullableString(value, 'destinazione');
+    const orarioPartenza = optionalNullableString(value, 'orarioPartenza');
+    const orarioArrivo = optionalNullableString(value, 'orarioArrivo');
+    const vettore = optionalNullableString(value, 'vettore');
+    if ([partenza, destinazione, orarioPartenza, orarioArrivo, vettore].includes(undefined)) {
+        throw new Error('Una tratta non rispetta il formato atteso.');
+    }
+
+    return {
+        partenza: partenza ?? null,
+        destinazione: destinazione ?? null,
+        orarioPartenza: orarioPartenza ?? null,
+        orarioArrivo: orarioArrivo ?? null,
+        vettore: vettore ?? null,
+        fermate,
+    };
+}
+
+function optionalNullableString(
+    object: Record<string, unknown>,
+    field: string,
+): string | null | undefined {
+    if (!(field in object)) {
+        return null;
+    }
+    const value = object[field];
+    return value === null || typeof value === 'string' ? value : undefined;
+}
+
+function isStringArray(value: unknown): value is string[] {
+    return Array.isArray(value) && value.every((item: unknown) => typeof item === 'string');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

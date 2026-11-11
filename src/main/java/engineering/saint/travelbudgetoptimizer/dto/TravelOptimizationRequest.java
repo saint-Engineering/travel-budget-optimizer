@@ -2,12 +2,19 @@ package engineering.saint.travelbudgetoptimizer.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.time.LocalDate;
+
 public record TravelOptimizationRequest(
         String partenza,
         String destinazione,
-        @JsonProperty("budgetMassimo") double budgetMassimo) {
+        @JsonProperty("budgetMassimo") double budgetMassimo,
+        LocalDate dataPartenza) {
 
     public static final int MAX_LOCATION_LENGTH = 256;
+
+    public TravelOptimizationRequest(String partenza, String destinazione, double budgetMassimo) {
+        this(partenza, destinazione, budgetMassimo, null);
+    }
 
     public TravelOptimizationRequest {
         if (partenza == null || partenza.isBlank()) {
