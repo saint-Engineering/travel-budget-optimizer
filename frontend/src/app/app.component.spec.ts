@@ -26,6 +26,6 @@ describe('AppComponent', () => {
         const page: HTMLElement = fixture.nativeElement;
         expect(page.querySelector('h1')?.textContent?.replace(/\s+/g, ' ').trim()).toBe('Niente Panico!');
         expect(page.querySelector('.subtitle')?.textContent?.trim())
-            .toBe('Viaggia per meno di 30 dollari altariani al giorno <span size="0.5em">( pi&ugrave; o meno )</span>');
+            .toBe('Viaggia per meno di 30 dollari altariani al giorno ( più o meno )');
     });
 });
