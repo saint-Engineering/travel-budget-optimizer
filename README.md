@@ -51,6 +51,16 @@ successivo invio. L'esecuzione usa due worker e una coda di 32 job; quando la
 capacita' e' esaurita, REST restituisce HTTP 429 e MCP `TOO_MANY_REQUESTS`.
 Le localita' non possono superare 256 caratteri.
 
+### Dettagli delle proposte
+
+La richiesta REST `/api/viaggi/ottimizza` accetta facoltativamente `dataPartenza`
+in formato ISO (`yyyy-MM-dd`); le richieste precedenti senza questo campo
+restano valide. Le proposte mantengono mezzo, costo, durata e descrizione e
+possono includere `dettaglioViaggio` con tratte, orari, fermate, vettori e
+fonti. I dettagli sono indicativi, non costituiscono disponibilita' o offerte
+prenotabili; se una fonte non restituisce dati, il campo viene mostrato come
+non disponibile e le tre proposte con i valori esistenti restano utilizzabili.
+
 Gli aggiornamenti SSE usano due worker condivisi, un massimo di 100 connessioni
 e un timeout di 60 secondi. Un job sconosciuto o scaduto restituisce HTTP 404;
 il superamento del limite di connessioni restituisce HTTP 429.

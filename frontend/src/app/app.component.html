@@ -57,6 +57,11 @@
                         essere maggiore di zero.</span>
                 </label>
 
+                <label class="field date-field">
+                    <span class="field-label">DATA DI PARTENZA <span class="optional-label">FACOLTATIVA</span></span>
+                    <span class="input-wrap"><input type="date" formControlName="dataPartenza"></span>
+                </label>
+
                 <button class="submit-button" type="submit" [disabled]="form.invalid || isLoading">
                     <span>{{ isLoading ? 'Sto cercando le opzioni' : 'Trova il mio viaggio' }}</span>
                     <span class="button-arrow" aria-hidden="true">{{ isLoading ? '…' : '↗' }}</span>
@@ -107,6 +112,35 @@
                 <h3>{{ option.mezzo }}</h3>
                 <p class="option-description">{{ option.descrizioneDettagliata }}</p>
                 <div class="option-meta"><span>◷ &nbsp;{{ option.tempoPercorrenza }}</span></div>
+                <section class="itinerary-details" aria-label="Dettagli indicativi del viaggio">
+                    <ng-container *ngIf="option.dettaglioViaggio as details; else noItineraryDetails">
+                        <span class="indicative-label" *ngIf="details.indicativo">DETTAGLI INDICATIVI</span>
+                        <article class="itinerary-leg" *ngFor="let leg of details.tratte">
+                            <p class="leg-route">
+                                {{ leg.partenza || 'Dato non disponibile' }}
+                                <span aria-hidden="true">→</span>
+                                {{ leg.destinazione || 'Dato non disponibile' }}
+                            </p>
+                            <p>Partenza: {{ leg.orarioPartenza || 'Dato non disponibile' }}</p>
+                            <p>Arrivo: {{ leg.orarioArrivo || 'Dato non disponibile' }}</p>
+                            <p>Vettore: {{ leg.vettore || 'Dato non disponibile' }}</p>
+                            <p>Fermate:
+                                <ng-container *ngIf="leg.fermate.length; else noStops">
+                                    {{ leg.fermate.join(', ') }}
+                                </ng-container>
+                                <ng-template #noStops>Dato non disponibile</ng-template>
+                            </p>
+                        </article>
+                        <p class="itinerary-source" *ngIf="details.fonti.length">
+                            Fonti:
+                            <a *ngFor="let source of details.fonti; let index = index" [href]="source" target="_blank"
+                                rel="noopener noreferrer">Fonte {{ index + 1 }}</a>
+                        </p>
+                    </ng-container>
+                    <ng-template #noItineraryDetails>
+                        <p class="details-unavailable">Dettagli indicativi: Dato non disponibile.</p>
+                    </ng-template>
+                </section>
                 <div class="option-price"><span>da</span><strong>{{ option.costoTotalizzato |
                         currency:'EUR':'symbol':'1.0-2':'it-IT' }}</strong></div>
             </article>

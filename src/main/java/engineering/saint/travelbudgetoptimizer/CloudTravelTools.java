@@ -1,20 +1,38 @@
 package engineering.saint.travelbudgetoptimizer;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
+import engineering.saint.travelbudgetoptimizer.dto.TravelItineraryDetails;
+import engineering.saint.travelbudgetoptimizer.dto.TravelLeg;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.net.http.HttpClient;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Component
 public class CloudTravelTools {
+    private static final Logger logger = LoggerFactory.getLogger(CloudTravelTools.class);
 
     private final RestClient.Builder restClientBuilder;
+    private final ObjectMapper objectMapper;
     private final String mapsBaseUrl;
     private final String mapsApiKey;
     private final String braveBaseUrl;
@@ -26,6 +44,22 @@ public class CloudTravelTools {
 
     public CloudTravelTools(
             RestClient.Builder restClientBuilder,
+            String mapsBaseUrl,
+            String mapsApiKey,
+            String braveBaseUrl,
+            String braveApiKey,
+            String perplexityBaseUrl,
+            String perplexityApiKey,
+            String browserlessBaseUrl,
+            String browserlessToken) {
+        this(restClientBuilder, new ObjectMapper(), mapsBaseUrl, mapsApiKey, braveBaseUrl, braveApiKey,
+                perplexityBaseUrl, perplexityApiKey, browserlessBaseUrl, browserlessToken);
+    }
+
+    @Autowired
+    public CloudTravelTools(
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper,
             @Value("${cloud-tools.google-maps.base-url:https://maps.googleapis.com/maps/api}") String mapsBaseUrl,
             @Value("${cloud-tools.google-maps.api-key:fake-key}") String mapsApiKey,
             @Value("${cloud-tools.brave-search.base-url:https://api.search.brave.com/res/v1/web}") String braveBaseUrl,
@@ -35,6 +69,7 @@ public class CloudTravelTools {
             @Value("${cloud-tools.browserless.base-url:https://chrome.browserless.io}") String browserlessBaseUrl,
             @Value("${cloud-tools.browserless.token:fake-key}") String browserlessToken) {
         this.restClientBuilder = restClientBuilder;
+        this.objectMapper = objectMapper;
         this.mapsBaseUrl = mapsBaseUrl;
         this.mapsApiKey = mapsApiKey;
         this.braveBaseUrl = braveBaseUrl;
@@ -80,10 +115,7 @@ public class CloudTravelTools {
         try {
             RestClient braveClient = restClientBuilder.baseUrl(braveBaseUrl).build();
             braveResult = braveClient.get()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/search")
-                            .queryParam("q", query)
-                            .build())
+                    .uri(uriBuilder -> uriBuilder.path("/search").queryParam("q", query).build())
                     .header("X-Subscription-Token", braveApiKey)
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
@@ -98,7 +130,8 @@ public class CloudTravelTools {
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("model", "sonar");
             payload.put("messages", new Object[]{
-                    Map.of("role", "user", "content", "Dammi un riepilogo prezzi reali treno/volo/bus per " + partenza + " -> " + destinazione)
+                    Map.of("role", "user", "content", "Dammi un riepilogo prezzi reali treno/volo/bus per "
+                            + partenza + " -> " + destinazione)
             });
 
             perplexityResult = perplexityClient.post()
@@ -121,6 +154,18 @@ public class CloudTravelTools {
                 + "Dettaglio Perplexity: " + sanitize(perplexityResult);
     }
 
+    public Map<String, TravelItineraryDetails> cercaDettagliViaggio(
+            String partenza, String destinazione, LocalDate dataPartenza) {
+        Map<String, TravelItineraryDetails> details =
+                new LinkedHashMap<>(cercaTratteGoogleMaps(partenza, destinazione));
+
+        List<String> braveSources = new ArrayList<>();
+        String braveEvidence = cercaEvidenzeBrave(partenza, destinazione, dataPartenza, braveSources);
+        cercaDettagliPerplexity(partenza, destinazione, dataPartenza, braveEvidence, braveSources)
+                .forEach(details::putIfAbsent);
+        return Map.copyOf(details);
+    }
+
     @Tool("Stima il costo medio degli alloggi a destinazione delegando lo scraping a un servizio remoto browser-as-a-service. Restituisce il prezzo medio per notte in formato testuale.")
     public String cercaCostoAlloggi(@P("Citta o luogo di destinazione") String destinazione) {
         try {
@@ -132,10 +177,7 @@ public class CloudTravelTools {
             );
 
             String response = browserlessClient.post()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/content")
-                            .queryParam("token", browserlessToken)
-                            .build())
+                    .uri(uriBuilder -> uriBuilder.path("/content").queryParam("token", browserlessToken).build())
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON)
                     .body(payload)
@@ -147,6 +189,296 @@ public class CloudTravelTools {
             return "Costo medio alloggi a " + destinazione
                     + ": circa EUR 110/notte (fallback POC: " + ex.getClass().getSimpleName() + ")";
         }
+    }
+
+    Map<String, TravelItineraryDetails> parseItinerarySuggestions(
+            String response, List<String> additionalSources) {
+        if (response == null || response.isBlank()) {
+            return Map.of();
+        }
+        try {
+            JsonNode root = objectMapper.readTree(response);
+            Set<String> citations = new LinkedHashSet<>();
+            JsonNode citationNodes = root.path("citations");
+            if (citationNodes.isArray()) {
+                for (JsonNode citation : citationNodes) {
+                    if (citation.isTextual() && citation.textValue().startsWith("https://")) {
+                        citations.add(citation.textValue());
+                    }
+                }
+            }
+            additionalSources.stream()
+                    .filter(source -> source.startsWith("https://"))
+                    .forEach(citations::add);
+            if (citations.isEmpty()) {
+                return Map.of();
+            }
+
+            String content = root.path("choices").path(0).path("message").path("content").asText(null);
+            if (content == null || content.isBlank()) {
+                return Map.of();
+            }
+            String json = content.trim()
+                    .replaceFirst("^```(?:json)?\\s*", "")
+                    .replaceFirst("\\s*```$", "");
+            JsonNode suggestions = objectMapper.readTree(json).path("opzioni");
+            if (!suggestions.isArray()) {
+                return Map.of();
+            }
+
+            Map<String, TravelItineraryDetails> detailsByMode = new LinkedHashMap<>();
+            for (JsonNode suggestion : suggestions) {
+                String mode = canonicalMode(suggestion.path("mezzo").asText(""));
+                JsonNode legsNode = suggestion.path("tratte");
+                if (mode == null || !legsNode.isArray()) {
+                    continue;
+                }
+                List<TravelLeg> legs = new ArrayList<>();
+                for (JsonNode leg : legsNode) {
+                    if (leg.isObject()) {
+                        TravelLeg parsedLeg = new TravelLeg(
+                                optionalText(leg, "partenza"),
+                                optionalText(leg, "destinazione"),
+                                optionalText(leg, "orarioPartenza"),
+                                optionalText(leg, "orarioArrivo"),
+                                optionalText(leg, "vettore"),
+                                textList(leg.path("fermate")));
+                        if (hasUsefulDetail(parsedLeg)) {
+                            legs.add(parsedLeg);
+                        }
+                    }
+                }
+                if (!legs.isEmpty()) {
+                    detailsByMode.putIfAbsent(mode, new TravelItineraryDetails(legs, List.copyOf(citations), true));
+                }
+            }
+            return Map.copyOf(detailsByMode);
+        } catch (JsonProcessingException exception) {
+            logger.warn("Unable to parse indicative itinerary response: {}",
+                    exception.getClass().getSimpleName());
+            return Map.of();
+        }
+    }
+
+    private Map<String, TravelItineraryDetails> cercaTratteGoogleMaps(String partenza, String destinazione) {
+        if (isFakeKey(mapsApiKey)) {
+            return Map.of();
+        }
+        try {
+            String response = clientWithTimeout(mapsBaseUrl).get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/directions/json")
+                            .queryParam("origin", partenza)
+                            .queryParam("destination", destinazione)
+                            .queryParam("mode", "transit")
+                            .queryParam("key", mapsApiKey)
+                            .build())
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .body(String.class);
+            return parseTransitDirections(response);
+        } catch (RestClientException exception) {
+            logger.warn("Unable to retrieve Google Maps transit details: {}",
+                    exception.getClass().getSimpleName());
+            return Map.of();
+        }
+    }
+
+    Map<String, TravelItineraryDetails> parseTransitDirections(String response) {
+        if (response == null || response.isBlank()) {
+            return Map.of();
+        }
+        try {
+            JsonNode root = objectMapper.readTree(response);
+            if (!"OK".equals(root.path("status").asText())) {
+                return Map.of();
+            }
+            Map<String, List<TravelLeg>> legsByMode = new LinkedHashMap<>();
+            for (JsonNode route : root.path("routes")) {
+                for (JsonNode routeLeg : route.path("legs")) {
+                    for (JsonNode step : routeLeg.path("steps")) {
+                        JsonNode transit = step.path("transit_details");
+                        if (!transit.isObject()) {
+                            continue;
+                        }
+                        String mode = canonicalGoogleMode(
+                                transit.path("line").path("vehicle").path("type").asText(""));
+                        if (mode == null) {
+                            continue;
+                        }
+                        JsonNode line = transit.path("line");
+                        JsonNode departure = transit.path("departure_stop");
+                        JsonNode arrival = transit.path("arrival_stop");
+                        List<String> stops = new ArrayList<>();
+                        for (JsonNode stop : transit.path("stops")) {
+                            String name = optionalText(stop, "name");
+                            if (name != null) {
+                                stops.add(name);
+                            }
+                        }
+                        legsByMode.computeIfAbsent(mode, ignored -> new ArrayList<>()).add(new TravelLeg(
+                                optionalText(departure, "name"),
+                                optionalText(arrival, "name"),
+                                optionalText(transit.path("departure_time"), "text"),
+                                optionalText(transit.path("arrival_time"), "text"),
+                                optionalText(line, "name"),
+                                stops));
+                    }
+                }
+            }
+            Map<String, TravelItineraryDetails> details = new LinkedHashMap<>();
+            legsByMode.forEach((mode, legs) -> details.put(mode,
+                    new TravelItineraryDetails(legs, List.of("https://maps.google.com/"), true)));
+            return details;
+        } catch (JsonProcessingException exception) {
+            logger.warn("Unable to parse Google Maps transit response: {}",
+                    exception.getClass().getSimpleName());
+            return Map.of();
+        }
+    }
+
+    private String cercaEvidenzeBrave(
+            String partenza, String destinazione, LocalDate dataPartenza, List<String> sources) {
+        if (isFakeKey(braveApiKey)) {
+            return "";
+        }
+        try {
+            String query = "orari tratte vettori treno autobus voli " + partenza + " " + destinazione
+                    + (dataPartenza == null ? "" : " " + dataPartenza);
+            String response = clientWithTimeout(braveBaseUrl).get()
+                    .uri(uriBuilder -> uriBuilder.path("/search").queryParam("q", query).build())
+                    .header("X-Subscription-Token", braveApiKey)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .body(String.class);
+            JsonNode results = objectMapper.readTree(response).path("web").path("results");
+            StringBuilder evidence = new StringBuilder();
+            if (results.isArray()) {
+                for (JsonNode result : results) {
+                    String url = optionalText(result, "url");
+                    if (url == null || !url.startsWith("https://")) {
+                        continue;
+                    }
+                    sources.add(url);
+                    evidence.append("\n- ")
+                            .append(optionalText(result, "title"))
+                            .append(": ")
+                            .append(optionalText(result, "description"))
+                            .append(" [")
+                            .append(url)
+                            .append(']');
+                    if (sources.size() == 5) {
+                        break;
+                    }
+                }
+            }
+            return evidence.toString();
+        } catch (RestClientException | JsonProcessingException exception) {
+            logger.warn("Unable to retrieve Brave travel search evidence: {}",
+                    exception.getClass().getSimpleName());
+            return "";
+        }
+    }
+
+    private Map<String, TravelItineraryDetails> cercaDettagliPerplexity(
+            String partenza, String destinazione, LocalDate dataPartenza,
+            String braveEvidence, List<String> braveSources) {
+        if (isFakeKey(perplexityApiKey)) {
+            return Map.of();
+        }
+        try {
+            String query = "Cerca itinerari indicativi documentati per " + partenza + " -> " + destinazione
+                    + (dataPartenza == null ? "" : " per il " + dataPartenza)
+                    + ". Considera queste evidenze web, senza trattarle come disponibilità attuale: " + braveEvidence
+                    + "\nRispondi solo con JSON nel formato {\"opzioni\":[{\"mezzo\":\"Treno\","
+                    + "\"tratte\":[{\"partenza\":null,\"destinazione\":null,"
+                    + "\"orarioPartenza\":null,\"orarioArrivo\":null,"
+                    + "\"vettore\":null,\"fermate\":[]}]}]}. "
+                    + "Includi solo dati supportati dalle fonti citate; non inventare orari, fermate o vettori. "
+                    + "Usa null o [] per i dati non disponibili. Sono dettagli indicativi, non prenotabili.";
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("model", "sonar");
+            payload.put("messages", new Object[]{Map.of("role", "user", "content", query)});
+
+            String response = clientWithTimeout(perplexityBaseUrl).post()
+                    .uri("/chat/completions")
+                    .header("Authorization", "Bearer " + perplexityApiKey)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .body(payload)
+                    .retrieve()
+                    .body(String.class);
+            return parseItinerarySuggestions(response, braveSources);
+        } catch (RestClientException exception) {
+            logger.warn("Unable to retrieve Perplexity itinerary details: {}",
+                    exception.getClass().getSimpleName());
+            return Map.of();
+        }
+    }
+
+    private RestClient clientWithTimeout(String baseUrl) {
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(3))
+                .build();
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(Duration.ofSeconds(8));
+        return RestClient.builder()
+                .baseUrl(baseUrl)
+                .requestFactory(requestFactory)
+                .build();
+    }
+
+    private boolean isFakeKey(String apiKey) {
+        return apiKey == null || apiKey.isBlank() || "fake-key".equals(apiKey);
+    }
+
+    private String canonicalGoogleMode(String vehicleType) {
+        return switch (vehicleType) {
+            case "RAIL", "HEAVY_RAIL", "HIGH_SPEED_TRAIN", "COMMUTER_TRAIN", "SUBWAY", "MONORAIL" -> "treno";
+            case "BUS", "INTERCITY_BUS", "TROLLEYBUS" -> "autobus";
+            default -> null;
+        };
+    }
+
+    private String canonicalMode(String value) {
+        String normalized = value.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalized.contains("tren")) {
+            return "treno";
+        }
+        if (normalized.contains("bus") || normalized.contains("autobus") || normalized.contains("coach")) {
+            return "autobus";
+        }
+        if (normalized.contains("aer") || normalized.contains("flight") || normalized.contains("vol")) {
+            return "aereo";
+        }
+        return null;
+    }
+
+    private boolean hasUsefulDetail(TravelLeg leg) {
+        return leg.partenza() != null
+                || leg.destinazione() != null
+                || leg.orarioPartenza() != null
+                || leg.orarioArrivo() != null
+                || leg.vettore() != null
+                || !leg.fermate().isEmpty();
+    }
+
+    private String optionalText(JsonNode object, String field) {
+        JsonNode value = object.path(field);
+        return value.isTextual() && !value.textValue().isBlank() ? value.textValue().trim() : null;
+    }
+
+    private List<String> textList(JsonNode values) {
+        if (!values.isArray()) {
+            return List.of();
+        }
+        Set<String> normalized = new LinkedHashSet<>();
+        for (JsonNode value : values) {
+            if (value.isTextual() && !value.textValue().isBlank()) {
+                normalized.add(value.textValue().trim());
+            }
+        }
+        return List.copyOf(normalized);
     }
 
     private String sanitize(String raw) {
