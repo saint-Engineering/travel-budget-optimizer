@@ -18,4 +18,14 @@ describe('AppComponent', () => {
         expect(fixture.componentInstance).toBeTruthy();
         expect(fixture.nativeElement.querySelector('form')).toBeTruthy();
     });
+
+    it('shows the Niente Panico! title and subtitle', () => {
+        const fixture = TestBed.createComponent(AppComponent);
+        fixture.detectChanges();
+
+        const page: HTMLElement = fixture.nativeElement;
+        expect(page.querySelector('h1')?.textContent?.replace(/\s+/g, ' ').trim()).toBe('Niente Panico!');
+        expect(page.querySelector('.subtitle')?.textContent?.trim())
+            .toBe('Viaggia per meno di 30 dollari altariani al giorno ( più o meno )');
+    });
 });

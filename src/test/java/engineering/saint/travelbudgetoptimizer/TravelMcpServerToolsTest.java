@@ -66,8 +66,34 @@ class TravelMcpServerToolsTest {
         assertError("INVALID_INPUT", () -> tools.ottimizzaBudgetViaggio(" ", "Milano", 100));
         assertError("INVALID_INPUT", () -> tools.ottimizzaBudgetViaggio("Roma", "Milano", -1));
         assertError("INVALID_INPUT", () -> tools.recuperaRisultatoOttimizzazione(" "));
+        assertError("INVALID_INPUT", () -> tools.ottimizzaBudgetViaggio("x".repeat(257), "Milano", 100));
     }
 
+    @Test
+    void boundsTrackingAndReclaimsExpiredJobs() {
+        for (int i = 0; i < TravelOptimizationEngine.MAX_JOBS; i++) {
+            startJob();
+        }
+        assertError("TOO_MANY_REQUESTS", () -> startJob());
+        Object tracked = ReflectionTestUtils.getField(tools, "jobStartTimes");
+        assertTrue(tracked instanceof Map<?, ?> map && map.size() == TravelOptimizationEngine.MAX_JOBS);
+        String expired = ((Map<?, ?>) tracked).keySet().iterator().next().toString();
+        setJobStartTime(expired, System.nanoTime() - TravelOptimizationEngine.JOB_RETENTION.toNanos());
+        startJob();
+        assertFalse(hasTrackedJob(expired));
+    }
+
+    @Test
+    void surfacesEngineCapacityRejectionWithoutLeakingTrackingEntry() {
+        org.mockito.Mockito.doThrow(new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.TOO_MANY_REQUESTS))
+                .when(engine).avviaOttimizzazione(org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.anyDouble());
+        assertError("TOO_MANY_REQUESTS", () -> startJob());
+        Object tracked = ReflectionTestUtils.getField(tools, "jobStartTimes");
+        assertTrue(tracked instanceof Map<?, ?> map && map.isEmpty());
+    }
     @Test
     void startsJobAndImmediatelyReturnsItsUniqueId() {
         TravelMcpServerTools.AcceptedOptimization accepted =
