@@ -108,7 +108,7 @@
                     <span class="option-number">0{{ index + 1 }}</span>
                     <span class="option-tag" *ngIf="index === 0">CONSIGLIATA</span>
                 </div>
-                <div class="option-icon" aria-hidden="true">{{ index === 0 ? '✈' : index === 1 ? '↗' : '⇄' }}</div>
+                <div class="option-icon" aria-hidden="true">{{ option.mezzo.toLowerCase().includes('tren') ? '🚆' : option.mezzo.toLowerCase().includes('aer') || option.mezzo.toLowerCase().includes('vol') ? '✈' : '🚗' }}</div>
                 <h3>{{ option.mezzo }}</h3>
                 <p class="option-description">{{ option.descrizioneDettagliata }}</p>
                 <div class="option-meta"><span>◷ &nbsp;{{ option.tempoPercorrenza }}</span></div>

@@ -33,6 +33,36 @@ describe('AppComponent', () => {
             .toBe('Viaggia per meno di 30 dollari altariani al giorno ( più o meno )');
     });
 
+    it('shows transport icons based on the travel mode, not the option order', () => {
+        const fixture = TestBed.createComponent(AppComponent);
+        fixture.componentInstance.alternatives = [
+            {
+                mezzo: 'Autobus',
+                costoTotalizzato: 40,
+                tempoPercorrenza: '5h',
+                descrizioneDettagliata: 'Roma-Milano',
+            },
+            {
+                mezzo: 'Aereo',
+                costoTotalizzato: 150,
+                tempoPercorrenza: '1h',
+                descrizioneDettagliata: 'Roma-Milano',
+            },
+            {
+                mezzo: 'Treno',
+                costoTotalizzato: 100,
+                tempoPercorrenza: '3h',
+                descrizioneDettagliata: 'Roma-Milano',
+            },
+        ];
+        fixture.detectChanges();
+
+        const page: HTMLElement = fixture.nativeElement;
+        const icons = Array.from(page.querySelectorAll('.option-icon'))
+            .map((icon) => icon.textContent?.trim());
+        expect(icons).toEqual(['🚗', '✈', '🚆']);
+    });
+
     it('keeps the departure date optional and displays unavailable details for legacy proposals', () => {
         const fixture = TestBed.createComponent(AppComponent);
         fixture.componentInstance.alternatives = [{
