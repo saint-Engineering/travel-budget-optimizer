@@ -25,6 +25,7 @@ export class AppComponent implements OnDestroy {
         partenza: ['', [Validators.required, Validators.minLength(2)]],
         destinazione: ['', [Validators.required, Validators.minLength(2)]],
         budgetMassimo: [300, [Validators.required, Validators.min(0.01)]],
+        dataPartenza: [''],
     });
 
     jobId: string | null = null;
@@ -56,10 +57,15 @@ export class AppComponent implements OnDestroy {
         this.streamSubscription?.unsubscribe();
         this.resetResults();
         this.isLoading = true;
-        const { partenza, destinazione, budgetMassimo } = this.form.getRawValue();
+        const { partenza, destinazione, budgetMassimo, dataPartenza } = this.form.getRawValue();
 
         this.requestSubscription = this.travelService
-            .avviaRichiestaOttimizzazione(partenza.trim(), destinazione.trim(), budgetMassimo)
+            .avviaRichiestaOttimizzazione(
+                partenza.trim(),
+                destinazione.trim(),
+                budgetMassimo,
+                dataPartenza || undefined,
+            )
             .subscribe({
                 next: ({ jobId }) => {
                     this.jobId = jobId;

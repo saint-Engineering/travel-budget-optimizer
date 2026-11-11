@@ -7,5 +7,11 @@ public record TravelOption(
         String mezzo,
         double costoTotalizzato,
         String tempoPercorrenza,
-        String descrizioneDettagliata) {
+        String descrizioneDettagliata,
+        TravelItineraryDetails dettaglioViaggio) {
+
+    public TravelOption(String mezzo, double costoTotalizzato, String tempoPercorrenza,
+                        String descrizioneDettagliata) {
+        this(mezzo, costoTotalizzato, tempoPercorrenza, descrizioneDettagliata, null);
+    }
 }

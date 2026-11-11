@@ -56,7 +56,8 @@ public class TravelRestController {
                 jobId,
                 request.partenza(),
                 request.destinazione(),
-                request.budgetMassimo());
+                request.budgetMassimo(),
+                request.dataPartenza());
         return ResponseEntity.accepted().body(Map.of("jobId", jobId));
     }
 
