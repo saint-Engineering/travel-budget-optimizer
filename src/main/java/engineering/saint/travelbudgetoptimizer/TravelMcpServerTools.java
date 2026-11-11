@@ -4,11 +4,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import engineering.saint.travelbudgetoptimizer.dto.TravelOption;
 import engineering.saint.travelbudgetoptimizer.dto.TravelOptionsResponse;
+import engineering.saint.travelbudgetoptimizer.dto.TravelOptimizationRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springaicommunity.mcp.annotation.McpTool;
 import org.springaicommunity.mcp.annotation.McpToolParam;
 import org.springframework.stereotype.Component;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Duration;
 import java.util.List;
@@ -42,17 +44,27 @@ public class TravelMcpServerTools {
             name = "ottimizzaBudgetViaggio",
             description = "Avvia in modo asincrono un'ottimizzazione di viaggio e restituisce il job ID.",
             generateOutputSchema = true)
-    public AcceptedOptimization ottimizzaBudgetViaggio(
+    public synchronized AcceptedOptimization ottimizzaBudgetViaggio(
             @McpToolParam(description = "Città o località di partenza", required = true) String partenza,
             @McpToolParam(description = "Città o località di destinazione", required = true) String destinazione,
             @McpToolParam(description = "Budget massimo del viaggio, finito e non negativo", required = true)
             double budgetMassimo) {
         validaInput(partenza, destinazione, budgetMassimo);
 
+        long now = System.nanoTime();
+        jobStartTimes.entrySet().removeIf(entry ->
+                now - entry.getValue() >= TravelOptimizationEngine.JOB_RETENTION.toNanos());
+        if (jobStartTimes.size() >= TravelOptimizationEngine.MAX_JOBS) {
+            logger.warn("MCP job tracking capacity exceeded");
+            throw new IllegalStateException("TOO_MANY_REQUESTS: troppi job; riprovare piu tardi.");
+        }
         String jobId = UUID.randomUUID().toString();
-        jobStartTimes.put(jobId, System.nanoTime());
+        jobStartTimes.put(jobId, now);
         try {
             travelOptimizationEngine.avviaOttimizzazione(jobId, partenza, destinazione, budgetMassimo);
+        } catch (ResponseStatusException exception) {
+            jobStartTimes.remove(jobId);
+            throw new IllegalStateException("TOO_MANY_REQUESTS: troppi job; riprovare piu tardi.");
         } catch (RuntimeException exception) {
             jobStartTimes.remove(jobId);
             throw erroreInterno(jobId, "avvio dell'ottimizzazione", exception);
@@ -73,6 +85,11 @@ public class TravelMcpServerTools {
         }
 
         Long startedAt = jobStartTimes.get(jobId);
+        if (startedAt != null
+                && System.nanoTime() - startedAt >= TravelOptimizationEngine.JOB_RETENTION.toNanos()) {
+            jobStartTimes.remove(jobId, startedAt);
+            startedAt = null;
+        }
         if (startedAt == null && Thread.currentThread().isInterrupted()) {
             throw new IllegalArgumentException("UNKNOWN_JOB: nessun job trovato per il job ID indicato.");
         }
@@ -148,6 +165,10 @@ public class TravelMcpServerTools {
     }
 
     private static void validaInput(String partenza, String destinazione, double budgetMassimo) {
+        if ((partenza != null && partenza.length() > TravelOptimizationRequest.MAX_LOCATION_LENGTH)
+                || (destinazione != null && destinazione.length() > TravelOptimizationRequest.MAX_LOCATION_LENGTH)) {
+            throw new IllegalArgumentException("INVALID_INPUT: localita troppo lunga.");
+        }
         if (partenza == null || partenza.isBlank()) {
             throw new IllegalArgumentException("INVALID_INPUT: partenza deve essere valorizzata.");
         }
