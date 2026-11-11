@@ -20,7 +20,7 @@
                         ],
                         "tsConfig": "tsconfig.app.json",
                         "inlineStyleLanguage": "css",
-                        "assets": [],
+                        "assets": ["src/assets"],
                         "styles": [
                             "src/styles.css"
                         ]
@@ -63,18 +63,9 @@
                     "defaultConfiguration": "development"
                 },
                 "test": {
-                    "builder": "@angular/build:karma",
+                    "builder": "@angular/build:unit-test",
                     "options": {
-                        "karmaConfig": "karma.conf.cjs",
-                        "tsConfig": "tsconfig.spec.json",
-                        "polyfills": [
-                            "zone.js",
-                            "zone.js/testing"
-                        ],
-                        "styles": [
-                            "src/styles.css"
-                        ],
-                        "assets": []
+                        "tsConfig": "tsconfig.spec.json"
                     }
                 }
             }

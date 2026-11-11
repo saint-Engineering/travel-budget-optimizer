@@ -1,10 +1,10 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
 
 :root {
-    color-scheme: light;
+    color-scheme: dark;
     font-family: 'DM Sans', sans-serif;
-    color: #17251f;
-    background: #f5f7f3;
+    color: #d3d8e0;
+    background: #000;
     font-synthesis: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
@@ -20,6 +20,11 @@ body {
     margin: 0;
     min-width: 320px;
     min-height: 100vh;
+    background-color: #000;
+    background-image: linear-gradient(rgba(0, 0, 0, .64), rgba(0, 0, 0, .64)), url('/assets/sfondo.png');
+    background-position: center top;
+    background-size: 100% auto;
+    background-repeat: no-repeat;
 }
 
 button,
@@ -33,5 +38,5 @@ button {
 
 ::selection {
     color: #fff;
-    background: #187a56;
+    background: #52647e;
 }
