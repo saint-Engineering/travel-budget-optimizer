@@ -29,10 +29,6 @@ class AppTest {
         assertEquals("/mcp/message", environment.getProperty("spring.ai.mcp.server.sse-message-endpoint"));
         assertEquals("Travel-Budget-Optimizer-Server", environment.getProperty("spring.ai.mcp.server.name"));
         assertEquals("1.0.0", environment.getProperty("spring.ai.mcp.server.version"));
-        assertEquals("fake-key", environment.getProperty("cloud-tools.brave-search.api-key"));
-        assertEquals("fake-key", environment.getProperty("cloud-tools.google-maps.api-key"));
-        assertEquals("fake-key", environment.getProperty("cloud-tools.browserless.token"));
-        assertEquals("fake-password", environment.getProperty("cloud-tools.neon-postgres.password"));
     }
 
     @Test

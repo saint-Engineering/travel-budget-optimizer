@@ -37,8 +37,8 @@ public class CloudTravelTools {
     private final String mapsApiKey;
     private final String braveBaseUrl;
     private final String braveApiKey;
-    private final String perplexityBaseUrl;
-    private final String perplexityApiKey;
+    private final String geminiBaseUrl;
+    private final String geminiApiKey;
     private final String browserlessBaseUrl;
     private final String browserlessToken;
 
@@ -48,12 +48,12 @@ public class CloudTravelTools {
             String mapsApiKey,
             String braveBaseUrl,
             String braveApiKey,
-            String perplexityBaseUrl,
-            String perplexityApiKey,
+            String geminiBaseUrl,
+            String geminiApiKey,
             String browserlessBaseUrl,
             String browserlessToken) {
         this(restClientBuilder, new ObjectMapper(), mapsBaseUrl, mapsApiKey, braveBaseUrl, braveApiKey,
-                perplexityBaseUrl, perplexityApiKey, browserlessBaseUrl, browserlessToken);
+                geminiBaseUrl, geminiApiKey, browserlessBaseUrl, browserlessToken);
     }
 
     @Autowired
@@ -64,8 +64,8 @@ public class CloudTravelTools {
             @Value("${cloud-tools.google-maps.api-key:fake-key}") String mapsApiKey,
             @Value("${cloud-tools.brave-search.base-url:https://api.search.brave.com/res/v1/web}") String braveBaseUrl,
             @Value("${cloud-tools.brave-search.api-key:fake-key}") String braveApiKey,
-            @Value("${cloud-tools.perplexity.base-url:https://api.perplexity.ai}") String perplexityBaseUrl,
-            @Value("${cloud-tools.perplexity.api-key:fake-key}") String perplexityApiKey,
+            @Value("${cloud-tools.gemini.base-url:https://generativelanguage.googleapis.com}") String geminiBaseUrl,
+            @Value("${cloud-tools.gemini.api-key:fake-key}") String geminiApiKey,
             @Value("${cloud-tools.browserless.base-url:https://chrome.browserless.io}") String browserlessBaseUrl,
             @Value("${cloud-tools.browserless.token:fake-key}") String browserlessToken) {
         this.restClientBuilder = restClientBuilder;
@@ -74,8 +74,8 @@ public class CloudTravelTools {
         this.mapsApiKey = mapsApiKey;
         this.braveBaseUrl = braveBaseUrl;
         this.braveApiKey = braveApiKey;
-        this.perplexityBaseUrl = perplexityBaseUrl;
-        this.perplexityApiKey = perplexityApiKey;
+        this.geminiBaseUrl = geminiBaseUrl;
+        this.geminiApiKey = geminiApiKey;
         this.browserlessBaseUrl = browserlessBaseUrl;
         this.browserlessToken = browserlessToken;
     }
@@ -124,26 +124,22 @@ public class CloudTravelTools {
             braveResult = "Brave non disponibile (fallback POC: " + ex.getClass().getSimpleName() + ")";
         }
 
-        String perplexityResult;
+        String geminiResult;
         try {
-            RestClient perplexityClient = restClientBuilder.baseUrl(perplexityBaseUrl).build();
-            Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("model", "sonar");
-            payload.put("messages", new Object[]{
-                    Map.of("role", "user", "content", "Dammi un riepilogo prezzi reali treno/volo/bus per "
-                            + partenza + " -> " + destinazione)
-            });
-
-            perplexityResult = perplexityClient.post()
-                    .uri("/chat/completions")
-                    .header("Authorization", "Bearer " + perplexityApiKey)
+            String query1 = "Dammi un riepilogo indicativo dei prezzi di treno, volo e bus per "
+                    + partenza + " -> " + destinazione + ". Riporta le fonti web consultate.";
+            geminiResult = restClientBuilder.baseUrl(geminiBaseUrl).build().post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/v1beta/models/gemini-2.5-flash:generateContent")
+                            .queryParam("key", geminiApiKey)
+                            .build())
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON)
-                    .body(payload)
+                    .body(geminiPayload(query1, true))
                     .retrieve()
                     .body(String.class);
         } catch (RestClientException ex) {
-            perplexityResult = "Perplexity non disponibile (fallback POC: " + ex.getClass().getSimpleName() + ")";
+            geminiResult = "Gemini non disponibile (fallback POC: " + ex.getClass().getSimpleName() + ")";
         }
 
         return "Tariffe trasporti " + partenza + " -> " + destinazione + "\n"
@@ -151,17 +147,17 @@ public class CloudTravelTools {
                 + "- Volo: EUR 80-140\n"
                 + "- Bus: EUR 35-55\n"
                 + "Dettaglio Brave: " + sanitize(braveResult) + "\n"
-                + "Dettaglio Perplexity: " + sanitize(perplexityResult);
+                + "Dettaglio Gemini: " + sanitize(extractGeminiText(geminiResult));
     }
 
     public Map<String, TravelItineraryDetails> cercaDettagliViaggio(
             String partenza, String destinazione, LocalDate dataPartenza) {
-        Map<String, TravelItineraryDetails> details =
-                new LinkedHashMap<>(cercaTratteGoogleMaps(partenza, destinazione));
+        Map<String, TravelItineraryDetails> details = new LinkedHashMap<>(
+                cercaTratteGoogleMaps(partenza, destinazione));
 
         List<String> braveSources = new ArrayList<>();
         String braveEvidence = cercaEvidenzeBrave(partenza, destinazione, dataPartenza, braveSources);
-        cercaDettagliPerplexity(partenza, destinazione, dataPartenza, braveEvidence, braveSources)
+        cercaDettagliGemini(partenza, destinazione, dataPartenza, braveEvidence, braveSources)
                 .forEach(details::putIfAbsent);
         return Map.copyOf(details);
     }
@@ -173,8 +169,7 @@ public class CloudTravelTools {
             Map<String, Object> payload = Map.of(
                     "url", "https://www.booking.com/searchresults.html?ss=" + destinazione,
                     "waitFor", 2500,
-                    "elements", new String[]{".price", "[data-testid='price-and-discounted-price']"}
-            );
+                    "elements", new String[] { ".price", "[data-testid='price-and-discounted-price']" });
 
             String response = browserlessClient.post()
                     .uri(uriBuilder -> uriBuilder.path("/content").queryParam("token", browserlessToken).build())
@@ -199,12 +194,11 @@ public class CloudTravelTools {
         try {
             JsonNode root = objectMapper.readTree(response);
             Set<String> citations = new LinkedHashSet<>();
-            JsonNode citationNodes = root.path("citations");
-            if (citationNodes.isArray()) {
-                for (JsonNode citation : citationNodes) {
-                    if (citation.isTextual() && citation.textValue().startsWith("https://")) {
-                        citations.add(citation.textValue());
-                    }
+            for (JsonNode chunk : root.path("candidates").path(0)
+                    .path("groundingMetadata").path("groundingChunks")) {
+                String uri = optionalText(chunk.path("web"), "uri");
+                if (uri != null && uri.startsWith("https://")) {
+                    citations.add(uri);
                 }
             }
             additionalSources.stream()
@@ -214,7 +208,7 @@ public class CloudTravelTools {
                 return Map.of();
             }
 
-            String content = root.path("choices").path(0).path("message").path("content").asText(null);
+            String content = extractGeminiText(response);
             if (content == null || content.isBlank()) {
                 return Map.of();
             }
@@ -380,10 +374,10 @@ public class CloudTravelTools {
         }
     }
 
-    private Map<String, TravelItineraryDetails> cercaDettagliPerplexity(
+    private Map<String, TravelItineraryDetails> cercaDettagliGemini(
             String partenza, String destinazione, LocalDate dataPartenza,
             String braveEvidence, List<String> braveSources) {
-        if (isFakeKey(perplexityApiKey)) {
+        if (isFakeKey(geminiApiKey)) {
             return Map.of();
         }
         try {
@@ -396,24 +390,61 @@ public class CloudTravelTools {
                     + "\"vettore\":null,\"fermate\":[]}]}]}. "
                     + "Includi solo dati supportati dalle fonti citate; non inventare orari, fermate o vettori. "
                     + "Usa null o [] per i dati non disponibili. Sono dettagli indicativi, non prenotabili.";
-            Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("model", "sonar");
-            payload.put("messages", new Object[]{Map.of("role", "user", "content", query)});
 
-            String response = clientWithTimeout(perplexityBaseUrl).post()
-                    .uri("/chat/completions")
-                    .header("Authorization", "Bearer " + perplexityApiKey)
+            RestClient.ResponseSpec response = clientWithTimeout(geminiBaseUrl).post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/v1beta/models/gemini-3.8-flash:generateContent")
+                            .queryParam("key", geminiApiKey)
+                            .build())
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON)
-                    .body(payload)
-                    .retrieve()
-                    .body(String.class);
-            return parseItinerarySuggestions(response, braveSources);
+                    .body(geminiPayload(query, true))
+                    .retrieve();
+            return parseItinerarySuggestions(response.body(String.class), braveSources);
         } catch (RestClientException exception) {
-            logger.warn("Unable to retrieve Perplexity itinerary details: {}",
+            logger.warn("Unable to retrieve Gemini itinerary details: {}",
                     exception.getClass().getSimpleName());
             return Map.of();
         }
+    }
+
+    private Map<String, Object> geminiPayload(String query, boolean enableGoogleSearch) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("contents", List.of(Map.of(
+                "role", "user",
+                "parts", List.of(Map.of("text", query)))));
+        if (enableGoogleSearch) {
+            payload.put("tools", List.of(Map.of("google_search", Map.of())));
+        }
+        return payload;
+    }
+
+    private String extractGeminiText(String response) {
+        if (response == null || response.isBlank()) {
+            return response;
+        }
+        try {
+            JsonNode parts = objectMapper.readTree(response).path("candidates").path(0)
+                    .path("content").path("parts");
+            if (parts.isArray()) {
+                StringBuilder text = new StringBuilder();
+                for (JsonNode part : parts) {
+                    String value = optionalText(part, "text");
+                    if (value != null) {
+                        if (!text.isEmpty()) {
+                            text.append('\n');
+                        }
+                        text.append(value);
+                    }
+                }
+                if (!text.isEmpty()) {
+                    return text.toString();
+                }
+            }
+        } catch (JsonProcessingException exception) {
+            logger.warn("Unable to parse Gemini response: {}", exception.getClass().getSimpleName());
+        }
+        return response;
     }
 
     private RestClient clientWithTimeout(String baseUrl) {
@@ -421,7 +452,7 @@ public class CloudTravelTools {
                 .connectTimeout(Duration.ofSeconds(3))
                 .build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(Duration.ofSeconds(8));
+        requestFactory.setReadTimeout(Duration.ofSeconds(30));
         return RestClient.builder()
                 .baseUrl(baseUrl)
                 .requestFactory(requestFactory)
