@@ -50,7 +50,7 @@ class TravelDetailsCompatibilityTest {
     }
 
     @Test
-    void acceptsOnlyCitedAndStructuredPerplexityDetails() throws Exception {
+        void acceptsOnlyCitedAndStructuredGeminiDetails() throws Exception {
         CloudTravelTools tools = tools();
         String content = """
                 {"opzioni":[{"mezzo":"Treno","tratte":[
@@ -60,8 +60,10 @@ class TravelDetailsCompatibilityTest {
                 ]}]}
                 """;
         String response = objectMapper.writeValueAsString(Map.of(
-                "citations", List.of("https://example.test/timetable"),
-                "choices", List.of(Map.of("message", Map.of("content", content)))));
+                "candidates", List.of(Map.of(
+                        "content", Map.of("parts", List.of(Map.of("text", content))),
+                        "groundingMetadata", Map.of("groundingChunks", List.of(Map.of(
+                                "web", Map.of("uri", "https://example.test/timetable"))))))));
 
         Map<String, TravelItineraryDetails> parsed = tools.parseItinerarySuggestions(response, List.of());
 
@@ -70,7 +72,8 @@ class TravelDetailsCompatibilityTest {
         assertTrue(parsed.get("treno").indicativo());
 
         String uncited = objectMapper.writeValueAsString(Map.of(
-                "choices", List.of(Map.of("message", Map.of("content", content)))));
+                "candidates", List.of(Map.of(
+                        "content", Map.of("parts", List.of(Map.of("text", content)))))));
         assertTrue(tools.parseItinerarySuggestions(uncited, List.of()).isEmpty());
     }
 
@@ -81,8 +84,10 @@ class TravelDetailsCompatibilityTest {
                 {"opzioni":[{"mezzo":"Autobus","tratte":[{"fermate":["Firenze"]}]}]}
                 """;
         String response = objectMapper.writeValueAsString(Map.of(
-                "citations", List.of("https://example.test/route"),
-                "choices", List.of(Map.of("message", Map.of("content", content)))));
+                "candidates", List.of(Map.of(
+                        "content", Map.of("parts", List.of(Map.of("text", content))),
+                        "groundingMetadata", Map.of("groundingChunks", List.of(Map.of(
+                                "web", Map.of("uri", "https://example.test/route"))))))));
 
         TravelLeg leg = tools.parseItinerarySuggestions(response, List.of())
                 .get("autobus").tratte().getFirst();
@@ -159,7 +164,7 @@ class TravelDetailsCompatibilityTest {
                 "fake-key",
                 "https://api.search.brave.com/res/v1/web",
                 "fake-key",
-                "https://api.perplexity.ai",
+                "https://generativelanguage.googleapis.com",
                 "fake-key",
                 "https://chrome.browserless.io",
                 "fake-key");
