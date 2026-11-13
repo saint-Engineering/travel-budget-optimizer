@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import engineering.saint.travelbudgetoptimizer.dto.TravelOption;
 import engineering.saint.travelbudgetoptimizer.dto.TravelItineraryDetails;
+import engineering.saint.travelbudgetoptimizer.dto.TravelLeg;
 import engineering.saint.travelbudgetoptimizer.dto.TravelOptionsResponse;
 import engineering.saint.travelbudgetoptimizer.dto.TravelOptimizationRequest;
 import jakarta.annotation.PreDestroy;
@@ -17,9 +18,11 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.StringJoiner;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -99,12 +102,13 @@ public class TravelOptimizationEngine {
                 jobId, partenza, destinazione, dataPartenza);
         TravelOptionsResponse alternative = new TravelOptionsResponse(List.of(
                 new TravelOption("Treno", budget * 0.65, "3h 30m",
-                        "Itinerario da " + partenza + " a " + destinazione, dettagliPerMezzo.get("treno")),
+                creaDescrizione("Treno", partenza, destinazione, dettagliPerMezzo.get("treno")),
+                dettagliPerMezzo.get("treno")),
                 new TravelOption("Autobus", budget * 0.4, "5h 15m",
-                        "Itinerario economico da " + partenza + " a " + destinazione,
+                creaDescrizione("Autobus", partenza, destinazione, dettagliPerMezzo.get("autobus")),
                         dettagliPerMezzo.get("autobus")),
                 new TravelOption("Aereo", budget * 0.9, "1h 20m",
-                        "Itinerario rapido da " + partenza + " a " + destinazione,
+                creaDescrizione("Aereo", partenza, destinazione, dettagliPerMezzo.get("aereo")),
                         dettagliPerMezzo.get("aereo"))));
 
         aggiornaStato(jobId, "Fase 3: Filtraggio e salvataggio sul DB Cloud Neon Postgres in corso");
@@ -116,6 +120,58 @@ public class TravelOptimizationEngine {
         } catch (JsonProcessingException exception) {
             aggiornaStato(jobId, "Ottimizzazione non riuscita");
             logger.error("Unable to serialize optimization result for job {}", jobId, exception);
+        }
+    }
+
+    private String creaDescrizione(
+            String mezzo, String partenza, String destinazione, TravelItineraryDetails dettagli) {
+        if (dettagli == null || dettagli.tratte().isEmpty()) {
+            StringBuilder fallback = new StringBuilder("Itinerario indicativo");
+            if (partenza != null && !partenza.isBlank() && destinazione != null && !destinazione.isBlank()) {
+                fallback.append(" da ").append(partenza.trim()).append(" a ").append(destinazione.trim());
+            }
+            return fallback.append("; dettagli della tratta per ")
+                    .append(mezzo.toLowerCase(java.util.Locale.ITALIAN))
+                    .append(" non disponibili.")
+                    .toString();
+        }
+
+        List<String> tratteDescrittive = new ArrayList<>();
+        int numeroTratta = 0;
+        for (TravelLeg tratta : dettagli.tratte()) {
+            numeroTratta++;
+            if (tratta == null) {
+                continue;
+            }
+            StringJoiner campi = new StringJoiner("; ");
+            aggiungiCampo(campi, "partenza", tratta.partenza());
+            aggiungiCampo(campi, "destinazione", tratta.destinazione());
+            aggiungiCampo(campi, "orario di partenza", tratta.orarioPartenza());
+            aggiungiCampo(campi, "orario di arrivo", tratta.orarioArrivo());
+            aggiungiCampo(campi, "vettore", tratta.vettore());
+            if (tratta.fermate() != null) {
+                String fermate = tratta.fermate().stream()
+                        .filter(fermata -> fermata != null && !fermata.isBlank())
+                        .map(String::trim)
+                        .collect(java.util.stream.Collectors.joining(", "));
+                aggiungiCampo(campi, "fermate", fermate);
+            }
+            if (campi.length() > 0) {
+                tratteDescrittive.add("Tratta " + numeroTratta + ": " + campi);
+            }
+        }
+
+        if (tratteDescrittive.isEmpty()) {
+            return creaDescrizione(mezzo, partenza, destinazione, null);
+        }
+        String intestazione = dettagli.indicativo() ? "Dettagli indicativi per " : "Dettagli disponibili per ";
+        return intestazione + mezzo.toLowerCase(java.util.Locale.ITALIAN) + ": "
+                + String.join(". ", tratteDescrittive) + ".";
+    }
+
+    private void aggiungiCampo(StringJoiner campi, String etichetta, String valore) {
+        if (valore != null && !valore.isBlank()) {
+            campi.add(etichetta + ": " + valore.trim());
         }
     }
 
