@@ -126,7 +126,7 @@ public class CloudTravelTools {
 
         String geminiResult;
         try {
-            String query = "Dammi un riepilogo indicativo dei prezzi di treno, volo e bus per "
+            String query1 = "Dammi un riepilogo indicativo dei prezzi di treno, volo e bus per "
                     + partenza + " -> " + destinazione + ". Riporta le fonti web consultate.";
             geminiResult = restClientBuilder.baseUrl(geminiBaseUrl).build().post()
                     .uri(uriBuilder -> uriBuilder
@@ -135,7 +135,7 @@ public class CloudTravelTools {
                             .build())
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON)
-                    .body(geminiPayload(query, true))
+                    .body(geminiPayload(query1, true))
                     .retrieve()
                     .body(String.class);
         } catch (RestClientException ex) {
@@ -391,17 +391,16 @@ public class CloudTravelTools {
                     + "Includi solo dati supportati dalle fonti citate; non inventare orari, fermate o vettori. "
                     + "Usa null o [] per i dati non disponibili. Sono dettagli indicativi, non prenotabili.";
 
-            String response = clientWithTimeout(geminiBaseUrl).post()
+            RestClient.ResponseSpec response = clientWithTimeout(geminiBaseUrl).post()
                     .uri(uriBuilder -> uriBuilder
-                            .path("/v1beta/models/gemini-2.5-flash:generateContent")
+                            .path("/v1beta/models/gemini-3.8-flash:generateContent")
                             .queryParam("key", geminiApiKey)
                             .build())
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON)
                     .body(geminiPayload(query, true))
-                    .retrieve()
-                    .body(String.class);
-            return parseItinerarySuggestions(response, braveSources);
+                    .retrieve();
+            return parseItinerarySuggestions(response.body(String.class), braveSources);
         } catch (RestClientException exception) {
             logger.warn("Unable to retrieve Gemini itinerary details: {}",
                     exception.getClass().getSimpleName());
@@ -453,7 +452,7 @@ public class CloudTravelTools {
                 .connectTimeout(Duration.ofSeconds(3))
                 .build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(Duration.ofSeconds(8));
+        requestFactory.setReadTimeout(Duration.ofSeconds(30));
         return RestClient.builder()
                 .baseUrl(baseUrl)
                 .requestFactory(requestFactory)
